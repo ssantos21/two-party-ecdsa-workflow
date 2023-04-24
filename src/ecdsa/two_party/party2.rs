@@ -10,6 +10,11 @@ pub struct SignMessage {
     pub second_message: party_two::EphKeyGenSecondMsg,
 }
 
+pub struct BlindedSignMessage {
+    pub partial_sig: party_two::PartialBlindedSig,
+    pub second_message: party_two::EphKeyGenSecondMsg,
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Party2SecondMessage {
     pub key_gen_second_message: party_two::KeyGenSecondMsg,
@@ -129,6 +134,35 @@ impl MasterKey2 {
             message,
         );
         SignMessage {
+            partial_sig,
+            second_message: eph_key_gen_second_message,
+        }
+    }
+
+    pub fn sign_second_message_with_blinding_factor(
+        &self,
+        ec_key_pair_party2: &party_two::EphEcKeyPair,
+        eph_comm_witness: party_two::EphCommWitness,
+        eph_party1_first_message: &party_one::EphKeyGenFirstMsg,
+        message: &BigInt,
+        blinding_factor: &BigInt,
+    ) -> BlindedSignMessage {
+        let eph_key_gen_second_message = party_two::EphKeyGenSecondMsg::verify_and_decommit(
+            eph_comm_witness,
+            eph_party1_first_message,
+        )
+        .expect("");
+
+        let partial_sig = party_two::PartialSig::compute_blinded(
+            &self.public.paillier_pub,
+            &self.public.c_key,
+            &self.private,
+            &ec_key_pair_party2,
+            &eph_party1_first_message.public_share,
+            message,
+            blinding_factor
+        );
+        BlindedSignMessage {
             partial_sig,
             second_message: eph_key_gen_second_message,
         }

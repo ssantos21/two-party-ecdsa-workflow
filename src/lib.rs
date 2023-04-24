@@ -8,7 +8,9 @@ pub enum Errors {
 
 #[cfg(test)]
 mod tests {
-    use curv::BigInt;
+    use std::cmp;
+
+    use curv::{BigInt, elliptic::curves::{Scalar, Secp256k1}, arithmetic::Modulo};
     use crate::ecdsa::two_party::{MasterKey1, MasterKey2};
     use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::party_one;
     use zk_paillier::zkproofs::SALT_STRING;
@@ -42,6 +44,52 @@ mod tests {
         let signature = party_one::Signature {
             r: sign_party_one_second_message.r,
             s: sign_party_one_second_message.s,
+        };
+
+        party_one::verify(&signature, &party_one_master_key.public.q, &message).expect("Invalid signature");
+    }
+
+    #[test]
+    fn test_key_gen_and_blinded_signature() {
+        let (party_one_master_key, party_two_master_key) = test_key_gen();
+
+        let message = BigInt::from(1234);
+
+        let (sign_party_two_first_message, eph_comm_witness, eph_ec_key_pair_party2) =
+                MasterKey2::sign_first_message();
+
+        let (sign_party_one_first_message, eph_ec_key_pair_party1) =
+            MasterKey1::sign_first_message();
+
+        let blinding_factor = Scalar::<Secp256k1>::random();
+        let inv_blinding_factor = blinding_factor.invert().unwrap();
+
+        let sign_party_two_second_message = party_two_master_key.sign_second_message_with_blinding_factor(
+            &eph_ec_key_pair_party2,
+            eph_comm_witness,
+            &sign_party_one_first_message,
+            &message,
+            &blinding_factor.to_bigint(),
+        );
+
+        let blinded_signature = party_one_master_key.sign_second_message_with_blinding_factor(
+            &sign_party_two_second_message,
+            &sign_party_two_first_message,
+            &eph_ec_key_pair_party1,
+        );
+
+        let q = Scalar::<Secp256k1>::group_order();
+
+        let unblinded_signature_s1 = BigInt::mod_mul(&blinded_signature.s, &inv_blinding_factor.to_bigint(), &q);
+
+        let unblinded_message_s = cmp::min(
+            unblinded_signature_s1.clone(),
+            q - unblinded_signature_s1,
+        );
+
+        let signature = party_one::Signature {
+            r: sign_party_two_second_message.partial_sig.r,
+            s: unblinded_message_s,
         };
 
         party_one::verify(&signature, &party_one_master_key.public.q, &message).expect("Invalid signature");

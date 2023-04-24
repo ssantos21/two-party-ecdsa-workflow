@@ -1,5 +1,5 @@
 use curv::{BigInt, elliptic::curves::{Point, Secp256k1}, cryptographic_primitives::proofs::sigma_dlog::DLogProof};
-use multi_party_ecdsa::{protocols::two_party_ecdsa::lindell_2017::{party_one, party_two}, utilities::zk_pdl_with_slack::{PDLwSlackStatement, PDLwSlackProof}};
+use multi_party_ecdsa::{protocols::two_party_ecdsa::lindell_2017::{party_one::{self, BlindedSignature}, party_two}, utilities::zk_pdl_with_slack::{PDLwSlackStatement, PDLwSlackProof}};
 use paillier::EncryptionKey;
 use serde::{Serialize, Deserialize};
 use sha2::Sha256;
@@ -7,7 +7,7 @@ use zk_paillier::zkproofs::{CompositeDLogProof, NiCorrectKeyProof};
 
 use crate::Errors;
 
-use super::{MasterKey1, Party1Public, party2::SignMessage};
+use super::{MasterKey1, Party1Public, party2::{SignMessage, BlindedSignMessage}};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct KeyGenParty1Message2 {
@@ -136,5 +136,29 @@ impl MasterKey1 {
         } else {
             Err(Errors::SignError)
         }
+    }
+
+    pub fn sign_second_message_with_blinding_factor(
+        &self,
+        party_two_sign_message: &BlindedSignMessage,
+        eph_key_gen_first_message_party_two: &party_two::EphKeyGenFirstMsg,
+        eph_ec_key_pair_party1: &party_one::EphEcKeyPair,
+    ) -> BlindedSignature  {
+        let verify_party_two_second_message =
+            party_one::EphKeyGenSecondMsg::verify_commitments_and_dlog_proof(
+                &eph_key_gen_first_message_party_two,
+                &party_two_sign_message.second_message,
+            )
+            .is_ok();
+
+        assert!(verify_party_two_second_message);
+
+        let blinded_signature = party_one::Signature::compute_blinded(
+            &self.private, 
+            &party_two_sign_message.partial_sig.c4, 
+            &eph_ec_key_pair_party1
+        );
+
+        blinded_signature
     }
 }
