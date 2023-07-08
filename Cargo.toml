@@ -5,9 +5,6 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
-[features]
-default = ["curv-kzen/rust-gmp-kzen"]
-
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }
 multi-party-ecdsa = { git = "https://github.com/ssantos21/multi-party-ecdsa.git", branch = "blinded_2p_ecdsa_01" }
